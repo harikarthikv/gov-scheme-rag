@@ -1,0 +1,26 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# indian-gov-rag — requirements.txt
+# Install with:  uv pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+# LangChain core + community integrations
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+
+# Google Gemini — official LangChain integration (>=4.0 uses google-genai SDK)
+langchain-google-genai>=4.0.0
+
+# Embeddings — HuggingFace adapter + sentence-transformers (runs fully locally)
+langchain-huggingface>=0.1.0
+sentence-transformers>=3.0.0
+
+# PDF parsing
+PyMuPDF>=1.24.0          # imported as `fitz`
+
+# Vector database — official standalone LangChain package
+langchain-chroma>=0.2.0
+chromadb>=0.5.0
+
+# Environment variable management
+python-dotenv>=1.0.0

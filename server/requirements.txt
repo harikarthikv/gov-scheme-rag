@@ -1,0 +1,17 @@
+# Web framework
+fastapi
+uvicorn[standard]
+
+# Environment & HTTP
+python-dotenv
+requests
+
+# Database
+# (SQLite is bundled with Python — no extra dep needed)
+
+# Vector store + local embeddings
+chromadb
+sentence-transformers
+
+# LLM (Gemini via new google-genai SDK)
+google-genai

@@ -1,0 +1,49 @@
+# Environment files
+.env
+**/.env
+**/.env.local
+**/.env.production
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE folders and project files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# Dependency and Python caches
+node_modules/
+venv/
+site-packages/
+target/
+__pycache__/
+*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+*.egg-info/
+.eggs/
+
+# Build outputs and coverage
+dist/
+build/
+coverage/
+*.log
+
+# Data files and artifacts
+dataset/
+data/
+chroma_db/
+
+# System and private key material
+*.pem
+*.key
+*.crt
+id_rsa*

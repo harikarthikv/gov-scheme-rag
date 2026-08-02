@@ -6,28 +6,33 @@ Orchestrates the full Retrieval-Augmented Generation pipeline.
 Data flow
 ─────────
 User Question
-    → Retriever  (ChromaDB similarity search)
-    → Prompt     (format context + sources + question)
-    → Gemini LLM (generate grounded answer)
+    → Retriever     (ChromaDB similarity search)
+    → Prompt        (format context + sources + question)
+    → DeepSeek LLM  (generate grounded answer)
     → Return structured result dict
 
 Responsibilities
 ────────────────
-• Initialise the Gemini LLM via langchain-google-genai
+• Initialise the DeepSeek LLM via langchain-openai (ChatOpenAI)
 • Accept a user question and return a structured response containing:
-    - answer            : the LLM's grounded answer (str)
-    - sources           : list of source metadata dicts
-    - similarity_scores : relevance scores for each retrieved chunk
-    - retrieved_chunks  : raw text of each retrieved chunk
+    - answer           : the LLM's grounded answer (str)
+    - sources          : list of source metadata dicts
+    - confidence_score : average similarity score of retrieved chunks
 """
 
 import logging
 import time
 
 from langchain_core.output_parsers import StrOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
-from src.config import GOOGLE_API_KEY, MODEL_NAME, TEMPERATURE
+from src.config import (
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    MAX_TOKENS,
+    MODEL_NAME,
+    TEMPERATURE,
+)
 from src.prompt import get_prompt_template
 from src.retriever import Retriever
 
@@ -46,13 +51,18 @@ class RAGPipeline:
         self.prompt = get_prompt_template()
         self.output_parser = StrOutputParser()
 
-        logger.info(f"Initialising Gemini model: '{MODEL_NAME}' (temperature={TEMPERATURE})")
-        self.llm = ChatGoogleGenerativeAI(
+        logger.info(
+            f"Initialising DeepSeek LLM: '{MODEL_NAME}' "
+            f"(temperature={TEMPERATURE}, max_tokens={MAX_TOKENS})"
+        )
+        self.llm = ChatOpenAI(
             model=MODEL_NAME,
             temperature=TEMPERATURE,
-            google_api_key=GOOGLE_API_KEY,
+            max_tokens=MAX_TOKENS,
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
         )
-        logger.info("Gemini LLM ready.")
+        logger.info("DeepSeek LLM ready.")
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -65,32 +75,32 @@ class RAGPipeline:
 
         Returns:
             A dict with keys:
-                "answer"            (str)        : grounded LLM response
-                "sources"           (list[dict]) : metadata of retrieved chunks
-                "similarity_scores" (list[float]): relevance score per chunk
-                "retrieved_chunks"  (list[str])  : raw text of each chunk
+                "answer"           (str)        : grounded LLM response
+                "sources"          (list[dict]) : metadata of retrieved chunks
+                "confidence_score" (float)      : avg similarity of top chunks
         """
         # ── Step 1: Retrieve relevant chunks ──────────────────────────────────
         retrieved: list[dict] = self.retriever.retrieve(question)
 
         if not retrieved:
-            logger.warning("No chunks passed the similarity threshold — returning fallback.")
+            logger.warning(
+                "No chunks passed the similarity threshold — returning fallback."
+            )
             return {
                 "answer": (
-                    "I couldn't find any relevant information in the official "
-                    "documents for your question. Please try rephrasing or ask "
-                    "about a specific scheme name."
+                    "I cannot find sufficient information about this in the "
+                    "available scheme details. Please try rephrasing your "
+                    "question or ask about a specific scheme name."
                 ),
                 "sources": [],
-                "similarity_scores": [],
-                "retrieved_chunks": [],
+                "confidence_score": 0.0,
             }
 
         # ── Step 2: Format context and source list ────────────────────────────
         context: str = "\n\n---\n\n".join(r["chunk"] for r in retrieved)
 
         sources: str = "\n".join(
-            f"[{i + 1}] {r['metadata'].get('filename', 'Unknown')} "
+            f"[{i + 1}] {r['metadata'].get('scheme_name', r['metadata'].get('filename', 'Unknown'))} "
             f"— Page {r['metadata'].get('page', '?')} "
             f"(score: {r['score']:.4f})"
             for i, r in enumerate(retrieved)
@@ -100,22 +110,26 @@ class RAGPipeline:
         prompt_messages = self.prompt.format_messages(
             context=context,
             sources=sources,
-            question=question,
+            query=question,
         )
 
-        # ── Step 4: Call Gemini ───────────────────────────────────────────────
-        logger.info(f"Sending prompt to Gemini ({MODEL_NAME}) …")
+        # ── Step 4: Call DeepSeek LLM ─────────────────────────────────────────
+        logger.info(f"Sending prompt to DeepSeek ({MODEL_NAME}) …")
         llm_start = time.time()
         raw_response = self.llm.invoke(prompt_messages)
         llm_elapsed = time.time() - llm_start
-        logger.info(f"Gemini responded in {llm_elapsed:.3f}s")
+        logger.info(f"DeepSeek responded in {llm_elapsed:.3f}s")
 
         answer: str = self.output_parser.invoke(raw_response)
 
-        # ── Step 5: Return structured result ──────────────────────────────────
+        # ── Step 5: Calculate confidence score ────────────────────────────────
+        scores = [r["score"] for r in retrieved]
+        confidence_score: float = round(sum(scores) / len(scores), 4)
+
+        # ── Step 6: Return structured result ──────────────────────────────────
         return {
             "answer": answer,
             "sources": [r["metadata"] for r in retrieved],
-            "similarity_scores": [r["score"] for r in retrieved],
-            "retrieved_chunks": [r["chunk"] for r in retrieved],
+            "similarity_scores": scores,
+            "confidence_score": confidence_score,
         }

@@ -1,26 +1,33 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# indian-gov-rag — requirements.txt
+# gov-scheme-rag — requirements.txt
 # Install with:  uv pip install -r requirements.txt
 # ─────────────────────────────────────────────────────────────────────────────
 
 # LangChain core + community integrations
-langchain>=0.3.0
-langchain-community>=0.3.0
-langchain-core>=0.3.0
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0
 
-# Google Gemini — official LangChain integration (>=4.0 uses google-genai SDK)
-langchain-google-genai>=4.0.0
+# DeepSeek LLM — via OpenAI-compatible API (langchain-openai)
+langchain-openai>=0.2.0
 
 # Embeddings — HuggingFace adapter + sentence-transformers (runs fully locally)
 langchain-huggingface>=0.1.0
-sentence-transformers>=3.0.0
+sentence-transformers>=2.2.2
 
-# PDF parsing
-PyMuPDF>=1.24.0          # imported as `fitz`
+# HuggingFace CLI + datasets
+datasets>=2.12.0
+pandas>=1.5.0
+huggingface-hub[cli]>=0.24.0
+pdfplumber>=0.11.0
 
-# Vector database — official standalone LangChain package
+# PDF parsing (for local data directory)
+PyMuPDF>=1.24.0
+
+# Vector databases — ChromaDB (primary) + FAISS (alternative)
 langchain-chroma>=0.2.0
-chromadb>=0.5.0
+chromadb>=0.4.0
+faiss-cpu>=1.7.4
 
 # Environment variable management
 python-dotenv>=1.0.0

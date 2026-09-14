@@ -1,241 +1,76 @@
-# Government Schemes — RAG Application
+# Government scheme PDF assistant
 
-A clean, modular **Retrieval-Augmented Generation (RAG)** pipeline built for
-understanding RAG architecture using the **shrijayan/gov_myscheme** dataset
-from Hugging Face — comprehensive Indian Government Scheme details.
+This project searches text extracted from PDF files in `data/text_data` and sends the most relevant chunks to a DeepSeek-compatible chat model. It provides a command-line interface and a Streamlit interface.
 
----
-
-## Architecture
-
-```
-shrijayan/gov_myscheme (HuggingFace Dataset)
-        ↓
-   datasets library
-        ↓
-  LangChain Documents  (scheme_name, eligibility, benefits, etc.)
-        ↓
-  RecursiveCharacterTextSplitter  (chunk_size=1000, overlap=200)
-        ↓
-  all-MiniLM-L6-v2 Embeddings  (384-dim, local)
-        ↓
-  Persistent ChromaDB  (chroma_db/)
-        ↓
-     Retriever  (top_k=3, similarity threshold)
-        ↓
-  ChatPromptTemplate  (grounded, no-hallucination)
-        ↓
-  DeepSeek LLM  (deepseek-v4-flash / deepseek-v4-pro, temp=0.1)
-        ↓
-   Grounded Answer  + Sources + Confidence Score
-```
-
----
-
-## Tech Stack
-
-| Component       | Library / Tool                               |
-|-----------------|----------------------------------------------|
-| Language        | Python 3.10+                                 |
-| Package manager | uv                                           |
-| LLM             | DeepSeek API (deepseek-v4-flash / deepseek-v4-pro)   |
-| LangChain       | langchain, langchain-core, langchain-community |
-| Embeddings      | sentence-transformers/all-MiniLM-L6-v2 (local)|
-| Dataset         | shrijayan/gov_myscheme (HuggingFace datasets) |
-| Vector store    | ChromaDB (persistent, on-disk)               |
-| Env management  | python-dotenv                                |
-
----
-
-## Project Structure
-
-```
-gov-scheme-rag/
-├── src/
-│   ├── __init__.py       # makes src a Python package
-│   ├── config.py         # all tuneable constants
-│   ├── data_loader.py    # HF dataset → LangChain Documents
-│   ├── embedding.py      # text splitting + embedding generation
-│   ├── vector_store.py   # ChromaDB load / build / persist
-│   ├── retriever.py      # similarity search + threshold filtering
-│   ├── prompt.py         # RAG ChatPromptTemplate
-│   └── rag.py            # end-to-end pipeline orchestrator
-├── chroma_db/            # auto-created on first run
-├── app.py                # main entrypoint (smart init + CLI)
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
----
+It is a learning project, not an authoritative source of government-scheme information. Check important information against the original document and an official source.
 
 ## Setup
 
-### 1. Clone / open the project
+Use Python 3.10 or later. Create a virtual environment, activate it, and install the dependencies:
 
-```bash
-cd gov-scheme-rag
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-### 2. Create virtual environment & install dependencies
+Copy `.env.example` to `.env` and set a valid key:
 
-```bash
-uv venv
-uv pip install -r requirements.txt
+```text
+DEEPSEEK_API_KEY=your_key_here
 ```
 
-### 3. Create `.env` file
+The moved `shrijayan/gov_myscheme` dataset is stored locally in `data/text_data`. The application uses this relative project path; it does not read from the Hugging Face cache at runtime.
 
-```bash
-# .env
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
+## Use
 
-# Optional — override the default model
-# DEEPSEEK_MODEL=deepseek-v4-flash
-# DEEPSEEK_MODEL=deepseek-v4-pro
+Build the index explicitly after adding, removing, or changing PDFs:
+
+```powershell
+python build_vectordb.py
 ```
 
-Get a free API key at: https://platform.deepseek.com/api_keys
+Then use either interface:
 
----
-
-## Usage
-
-### Just run app.py — it handles everything
-
-```bash
-uv run python app.py
+```powershell
+python app.py
+streamlit run app_streamlit.py
 ```
 
-**First run**: Downloads the `shrijayan/gov_myscheme` dataset from Hugging Face,
-chunks it, generates 384-dimensional embeddings, and persists to `chroma_db/`.
+The CLI and Streamlit app load the configured collection from `chroma_db`. If it is missing, they build it from the local PDFs. The build script does not replace an existing collection.
 
-**Subsequent runs**: Loads the existing ChromaDB instantly from disk — no
-re-downloading, no re-embedding.
+## Project structure
 
-### Example session
-
-```
-═══════════════════════════════════════════════════════════════════════
-  🇮🇳  Indian Government Schemes — RAG Assistant
-  Powered by DeepSeek + ChromaDB + sentence-transformers
-  Dataset: shrijayan/gov_myscheme
-  Ask about any scheme. Type 'exit' to quit.
-═══════════════════════════════════════════════════════════════════════
-
-Ask about a government scheme (or type 'exit'): What is PM Kisan and who is eligible?
-
-──────────────────────────────────────────────────────────────────────
-
-📋  QUESTION
-    What is PM Kisan and who is eligible?
-
-📂  RETRIEVED SOURCES
-    [1]  PM Kisan Samman Nidhi  |  Ministry of Agriculture  |  Central  |  Score: 0.8912
-    [2]  PM Kisan Yojana        |  Ministry of Agriculture  |  Central  |  Score: 0.7845
-
-    📊  Confidence Score: 0.8379
-
-💬  ANSWER
-
-    PM Kisan Samman Nidhi is a Central Sector scheme that provides
-    income support to all landholding farmer families ...
-    📄 Source: PM Kisan Samman Nidhi (Ministry: Ministry of Agriculture, Category: Central)
-
-──────────────────────────────────────────────────────────────────────
+```text
+app.py                         Command-line interface
+app_streamlit.py               Streamlit chat interface
+build_vectordb.py              Explicit index builder
+src/                           Application modules
+test/gold_standard_dataset.py  Evaluation fixture
+run_evaluation.py              API-backed evaluation script
 ```
 
----
+## Workflow
 
-## Configuration
-
-All settings are in [`src/config.py`](src/config.py):
-
-| Constant               | Default                                | Description                          |
-|------------------------|----------------------------------------|--------------------------------------|
-| `HF_DATASET_NAME`      | `shrijayan/gov_myscheme`              | HuggingFace dataset identifier       |
-| `VECTOR_DB_PATH`       | `chroma_db/`                          | ChromaDB persistence directory       |
-| `EMBEDDING_MODEL`      | `sentence-transformers/all-MiniLM-L6-v2` | Local embedding model (384-dim)  |
-| `MODEL_NAME`           | `deepseek-chat`                        | DeepSeek model (overridable via env)  |
-| `TEMPERATURE`          | `0.1`                                 | LLM temperature (low = factual)      |
-| `MAX_TOKENS`           | `1024`                                | Max response tokens                  |
-| `CHUNK_SIZE`           | `1000`                                | Characters per chunk                 |
-| `CHUNK_OVERLAP`        | `200`                                 | Overlap between chunks               |
-| `TOP_K`                | `3`                                   | Chunks retrieved per query           |
-| `SIMILARITY_THRESHOLD` | `0.3`                                 | Minimum score to keep a result       |
-
-To use a different DeepSeek model, set in `.env`:
-
-```bash
-DEEPSEEK_MODEL=deepseek-reasoner
+```text
+Local PDFs -> page text -> overlapping chunks -> local embeddings -> Chroma index
+Question -> Chroma similarity search -> top matching chunks -> chat model -> answer and source metadata
 ```
 
----
+The chunk size is 1,000 characters with 200-character overlap. The retriever asks Chroma for up to three results and keeps scores at or above 0.3. These are configuration values, not quality guarantees.
 
-## Module Responsibilities
+## Evaluation
 
-| File              | Single Responsibility                                        |
-|-------------------|--------------------------------------------------------------|
-| `config.py`       | All constants and environment variable loading               |
-| `data_loader.py`  | HF dataset loading → LangChain Document conversion           |
-| `embedding.py`    | Text splitting + embedding model + numpy embedding arrays    |
-| `vector_store.py` | ChromaDB create / load / persist with UUIDs                  |
-| `retriever.py`    | Similarity search + threshold filtering                      |
-| `prompt.py`       | RAG prompt template (grounded, no-hallucination)             |
-| `rag.py`          | Orchestration: retriever → prompt → DeepSeek → structured result |
-| `app.py`          | Entry point: smart init + interactive CLI                    |
+`run_evaluation.py` runs ten manually defined cases from `test/gold_standard_dataset.py`. It makes model API calls and uses another model call to grade answers, so it requires `DEEPSEEK_API_KEY`, network access, and can incur provider charges. Run it with `python run_evaluation.py`.
 
----
+No evaluation results are committed as project claims. See [limitations](docs/limitations.md) before interpreting output.
 
-## RAG Pipeline Evaluation
+## Limitations
 
-### Methodology
+- PDF extraction skips files that raise an extraction error; it does not use OCR.
+- Retrieval and generated answers can be incomplete, irrelevant, or incorrect.
+- Source citations are requested from the model but are not verified after generation.
+- The relevance scores come from Chroma's search API; they are not calibrated confidence values.
+- The current code has no automated unit-test suite or lint configuration.
 
-The RAG pipeline was evaluated on a **gold-standard dataset** of 10 hand-crafted
-question-answer pairs sourced from specific scheme PDFs (e.g., *25-ciss.pdf*,
-*aabcs.pdf*). We evaluated the **retriever** and **generator** independently to
-isolate search quality from LLM generation quality.
-
-### Metrics
-
-| Metric                     | Score      | Description |
-|----------------------------|------------|-------------|
-| **Retrieval Recall @ 3**   | **70.0%**  | Percentage of test cases where at least one of the top-3 retrieved chunks came from the correct source PDF and page. |
-| **Avg. LLM Judge Score**   | **3.80 / 5** | LLM-as-a-judge correctness score averaged across all 10 test cases (scale: 1 = incorrect, 5 = excellent). |
-
-**Grade Distribution** (1 = incorrect, 5 = excellent):
-
-| Grade | Count |
-|-------|-------|
-| 5 (Excellent) | 5 |
-| 4 (Good)      | 1 |
-| 3 (Acceptable)| 2 |
-| 2 (Poor)      | 1 |
-| 1 (Incorrect) | 1 |
-
-### Resume Highlights
-
-- **Designed and executed an automated RAG evaluation framework** using a
-  10-question gold-standard dataset, achieving **70% retrieval recall @ 3** and
-  an **average LLM-as-a-judge correctness score of 3.80/5** on a production
-  government-schemes Q&A pipeline.
-- **Implemented dual-metric evaluation** combining deterministic
-  source-document/page recall with LLM-based semantic correctness grading,
-  isolating retriever quality from generator performance across 723 scheme PDFs.
-- **Built a reproducible evaluation harness** (`run_evaluation.py`) with
-  per-case diagnostics, grade distribution analysis, and auto-generated
-  documentation updates, enabling continuous benchmarking of RAG pipeline
-  improvements.
-
-## Verification Checklist
-
-1. **Data Ingestion**: HF records are fetched and wrapped in LangChain Documents
-   with scheme metadata (scheme_name, ministry, category, state, target_audience).
-2. **Vector Dimension**: Embeddings are 384-dimensional, matching
-   `all-MiniLM-L6-v2` and ChromaDB's index.
-3. **No Regeneration**: Running `app.py` a second time loads from `chroma_db/`
-   instantly without re-downloading.
-4. **Grounded Generation**: Queries about topics not in the dataset receive a
-   graceful "I cannot find sufficient information" response — no hallucination.
-
-```
+More detail is in [docs/architecture.md](docs/architecture.md) and [docs/limitations.md](docs/limitations.md).

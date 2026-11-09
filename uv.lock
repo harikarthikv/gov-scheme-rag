@@ -566,15 +566,15 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chromadb", specifier = ">=0.4.0" },
-    { name = "langchain-chroma", specifier = ">=0.2.0" },
-    { name = "langchain-core", specifier = ">=0.2.0" },
-    { name = "langchain-huggingface", specifier = ">=0.1.0" },
-    { name = "langchain-openai", specifier = ">=0.2.0" },
-    { name = "langchain-text-splitters", specifier = ">=0.2.0" },
+    { name = "chromadb", specifier = ">=1.5,<2" },
+    { name = "langchain-chroma", specifier = ">=1.1,<2" },
+    { name = "langchain-core", specifier = ">=1,<2" },
+    { name = "langchain-huggingface", specifier = ">=1,<2" },
+    { name = "langchain-openai", specifier = ">=1,<2" },
+    { name = "langchain-text-splitters", specifier = ">=1,<2" },
     { name = "pymupdf", specifier = ">=1.24.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "sentence-transformers", specifier = ">=2.2.2" },
+    { name = "sentence-transformers", specifier = ">=6,<7" },
     { name = "streamlit", specifier = ">=1.61.0" },
 ]
 

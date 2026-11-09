@@ -1,0 +1,4 @@
+[server]
+# Transformers exposes lazy modules; scanning them imports unrelated optional
+# vision/audio backends. Restart the server after code changes instead.
+fileWatcherType = "none"

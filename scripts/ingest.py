@@ -1,11 +1,11 @@
 """Build the local Chroma index from PDFs under data/text_data."""
 
 def main() -> None:
-    from src.data_loader import load_all_documents
-    from src.embedding import EmbeddingPipeline
-    from src.vector_store import SchemeVectorStore
+    from gov_scheme_rag.data_loader import SchemeDataLoader
+    from gov_scheme_rag.embedding import EmbeddingPipeline
+    from gov_scheme_rag.vector_store import SchemeVectorStore
 
-    documents = load_all_documents()
+    documents = SchemeDataLoader().load()
     store = SchemeVectorStore(EmbeddingPipeline())
     if store.db_exists():
         raise FileExistsError(

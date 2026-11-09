@@ -1,76 +1,144 @@
-# Government scheme PDF assistant
+# Government scheme RAG assistant
 
-This project searches text extracted from PDF files in `data/text_data` and sends the most relevant chunks to a DeepSeek-compatible chat model. It provides a command-line interface and a Streamlit interface.
-
-It is a learning project, not an authoritative source of government-scheme information. Check important information against the original document and an official source.
+A Streamlit application that answers questions from Indian government scheme PDFs
+using MiniLM embeddings, ChromaDB, hybrid BM25/vector retrieval and DeepSeek.
+Answers include numbered citations and the retrieved PDF excerpts.
 
 ## Setup
 
-Use Python 3.10 or later. Create a virtual environment, activate it, and install the dependencies:
+Use Python 3.14 and run commands from the repository root:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+uv sync --frozen
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Copy `.env.example` to `.env` and set a valid key:
+Set `DEEPSEEK_API_KEY` in `.env`. Keep an existing environment file; it is ignored
+by Git. Without uv, create a virtual environment and run `python -m pip install -e .`.
+Dependencies are declared only in [pyproject.toml](pyproject.toml); [uv.lock](uv.lock)
+records the reproducible environment.
 
-```text
-DEEPSEEK_API_KEY=your_key_here
-```
+Place the source PDFs under `data/text_data/`. The original collection contains
+2,876 PDFs from Hugging Face `shrijayan/gov_myscheme`; PDFs and generated indexes
+are not included in Git. Embedding weights download on first use. After caching
+them, `RAG_LOCAL_MODELS_ONLY=1` enables offline embedding initialization.
 
-The moved `shrijayan/gov_myscheme` dataset is stored locally in `data/text_data`. The application uses this relative project path; it does not read from the Hugging Face cache at runtime.
-
-## Use
-
-Build the index explicitly after adding, removing, or changing PDFs:
+## Run
 
 ```powershell
-python build_vectordb.py
+uv run streamlit run app.py
 ```
 
-Then use either interface:
+Select **Load assistant**, then enter a self-contained question. Streamlit is the
+only user interface. Source numbers in the answer match the filename, 1-based page
+and excerpt shown below it. Chat history is displayed but is not sent to the model.
+
+The app reuses the configured index or builds it if missing. To ingest explicitly:
 
 ```powershell
-python app.py
-streamlit run app_streamlit.py
+uv run python -m scripts.ingest
 ```
 
-The CLI and Streamlit app load the configured collection from `chroma_db`. If it is missing, they build it from the local PDFs. The build script does not replace an existing collection.
+An existing collection is never overwritten. After changing PDFs, embeddings or
+chunking, set a new `RAG_COLLECTION` in `.env`, ingest and restart the app. Streamlit
+file watching is disabled because scanning Transformers' lazy modules imports
+unrelated optional backends; restart the server after changing code.
 
-## Project structure
+## Pipeline and configuration
 
 ```text
-app.py                         Command-line interface
-app_streamlit.py               Streamlit chat interface
-build_vectordb.py              Explicit index builder
-src/                           Application modules
-test/gold_standard_dataset.py  Evaluation fixture
-run_evaluation.py              API-backed evaluation script
+PDF pages -> overlapping chunks + stable IDs -> normalized MiniLM -> Chroma
+Question -> dense + BM25 candidates -> deduplication + RRF -> optional re-ranking
+         -> labeled excerpts -> DeepSeek -> citation validation -> answer
 ```
 
-## Workflow
+The default embedding model is `sentence-transformers/all-MiniLM-L6-v2` on CPU.
+Chunks contain 1,000 characters with 200-character overlap. Hybrid retrieval fuses
+30 candidates per branch with equal weights and an RRF constant of 60, returning
+5 contexts. A cross-encoder is available but disabled: it did not improve ranking
+in the development benchmark.
+
+Set overrides in [.env.example](.env.example)'s corresponding `.env` entries:
+
+| Setting | Default / purpose |
+|---|---|
+| `RAG_RETRIEVAL_MODE` | `hybrid`; also `baseline`, `dense`, `bm25` |
+| `RAG_TOP_K`, `RAG_CANDIDATE_K` | `5`, `30` |
+| `RAG_DENSE_WEIGHT`, `RAG_RRF_CONSTANT` | `0.5`, `60` |
+| `RAG_SIMILARITY_THRESHOLD` | `0.3`, used only by baseline/dense retrieval |
+| `RAG_RERANKER_MODEL` | Empty; optional Sentence Transformers cross-encoder |
+| `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_DEVICE` | MiniLM, `cpu` |
+| `RAG_QUERY_PREFIX`, `RAG_DOCUMENT_PREFIX` | Empty; prefixes for models such as E5 |
+| `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP` | `1000`, `200` |
+| `RAG_DATA_DIR`, `RAG_DB_PATH` | `data/text_data`, `chroma_db` |
+| `RAG_COLLECTION` | `gov_schemes_local_dataset` |
+| `DEEPSEEK_MODEL`, `RAG_JUDGE_MODEL` | Answer model and optional evaluation judge |
+
+Relative corpus/index paths resolve from the project root. Process environment
+values override `.env`. Model/chunk settings must match the saved collection.
+New indexes use cosine distance and record compatibility/completeness metadata;
+the original index retains L2. Dense, BM25, RRF and cross-encoder scores are ranking
+values, not confidence, and do not share a meaningful acceptance threshold.
+
+## Evaluate and test
+
+The committed [benchmark](evaluation/schemes_v1.jsonl) has 110 evidence-backed
+questions from 59 PDFs, with 25 development and 85 held-out test cases.
+
+```powershell
+# Retrieval only; no API key required
+uv run python -m scripts.evaluate --output evaluation/results/retrieval
+
+# Generation plus structured LLM judging; incurs DeepSeek charges
+uv run python -m scripts.evaluate --generate --modes hybrid --ks 1 3 5 --workers 4 --output evaluation/results/generation
+
+# Offline regression and headless Streamlit tests
+uv run python -m unittest discover -s tests -v
+
+# Real-PDF ingestion/reload/retrieval smoke test; add --generate for DeepSeek
+uv run python -m scripts.smoke_pipeline
+
+# Check every indexed chunk against the local source PDFs
+uv run python -m scripts.audit_corpus
+```
+
+Use `--split dev` for tuning, then `--split test`. Runs save configuration, hashes,
+case-level results, errors and metric denominators under the ignored output
+folder. Repeating the same command resumes a compatible run; changed settings need
+a new output directory. Failed calls never become invented scores.
+
+[Evaluation methodology](evaluation/README.md) describes the reusable dataset
+schema, metric definitions, dataset regeneration and report commands.
+[Recorded results](evaluation/RESULTS.md) distinguish measured improvements from
+limitations. The recorded page Recall@3 increased from 0.8727 to 0.9091; this
+cleanup does not change the retrieval or generation algorithms.
+
+## Project layout
 
 ```text
-Local PDFs -> page text -> overlapping chunks -> local embeddings -> Chroma index
-Question -> Chroma similarity search -> top matching chunks -> chat model -> answer and source metadata
+app.py                    Streamlit interface
+src/gov_scheme_rag/        Ingestion, embeddings, storage, retrieval, generation, metrics
+scripts/                  Ingestion, evaluation and reproducibility commands
+tests/                    Offline regression and Streamlit tests
+evaluation/               Reviewed benchmark, seed data, methodology and result snapshot
+.streamlit/config.toml    Streamlit server configuration
+pyproject.toml / uv.lock   Dependencies and package configuration
+data/ / chroma_db/         Local-only corpus and index (ignored)
 ```
 
-The chunk size is 1,000 characters with 200-character overlap. The retriever asks Chroma for up to three results and keeps scores at or above 0.3. These are configuration values, not quality guarantees.
+## Limits
 
-## Evaluation
+PDF extraction has no OCR or table reconstruction. Archived PDFs can contain
+outdated, contradictory or malformed information. Character splitting may omit
+necessary context or exceed the embedding model's token limit. Verify current
+policy against official sources.
 
-`run_evaluation.py` runs ten manually defined cases from `test/gold_standard_dataset.py`. It makes model API calls and uses another model call to grade answers, so it requires `DEEPSEEK_API_KEY`, network access, and can incur provider charges. Run it with `python run_evaluation.py`.
+Citation validation checks source indices, not factual entailment. The prompt
+requires grounding and abstention, but the model and evaluation judge can still
+be wrong. The benchmark is English, small and often scheme-specific; it does not
+establish multilingual or general citizen-query accuracy. BM25 holds the corpus
+in memory, and source edits require explicit auditing/re-ingestion. This is a local
+MVP without authentication, rate limiting or deployment hardening.
 
-No evaluation results are committed as project claims. See [limitations](docs/limitations.md) before interpreting output.
-
-## Limitations
-
-- PDF extraction skips files that raise an extraction error; it does not use OCR.
-- Retrieval and generated answers can be incomplete, irrelevant, or incorrect.
-- Source citations are requested from the model but are not verified after generation.
-- The relevance scores come from Chroma's search API; they are not calibrated confidence values.
-- The current code has no automated unit-test suite or lint configuration.
-
-More detail is in [docs/architecture.md](docs/architecture.md) and [docs/limitations.md](docs/limitations.md).
+Secrets, PDFs, database files, temporary indexes and raw evaluation output are
+ignored. Add any custom output/index directory to `.gitignore` before publishing.

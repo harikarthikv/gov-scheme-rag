@@ -1,49 +1,44 @@
-# Environment files
-.env
-**/.env
-**/.env.local
-**/.env.production
-
-# OS artifacts
-.DS_Store
-Thumbs.db
-
-# IDE folders and project files
-.vscode/
-.idea/
-*.iml
-*.swp
-*.swo
-
-# Dependency and Python caches
-node_modules/
-venv/
-site-packages/
-target/
-__pycache__/
-*.pyc
-*.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
-env/
-*.egg-info/
-.eggs/
-
-# Build outputs and coverage
-dist/
-build/
-coverage/
-*.log
-
-# Data files and artifacts
-dataset/
-data/
-chroma_db/
-
-# System and private key material
+# Secrets
+.env*
+!.env.example
+.streamlit/secrets.toml
 *.pem
 *.key
-*.crt
-id_rsa*
+*.p12
+*.pfx
+
+# Local corpus, indexes, models and generated evaluation runs
+/data/
+/chroma_db/
+/evaluation/results/
+*.pdf
+*.sqlite*
+*.db
+*.safetensors
+*.bin
+*.onnx
+*.pt
+*.pth
+
+# Python environments, caches and builds
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+*.log
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

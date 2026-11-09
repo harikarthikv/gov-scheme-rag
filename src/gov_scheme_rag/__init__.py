@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from gov-scheme-rag!")
+"""PDF-grounded government scheme retrieval and generation."""
